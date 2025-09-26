@@ -3,32 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Авенко - Подписка</title>
+    <title>Авенко - Технологические карты</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- X-Frame-Bypass Scripts -->
-    <script type="module" src="https://unpkg.com/x-frame-bypass"></script>
-    <script src="https://unpkg.com/@ungap/custom-elements-builtin"></script>
+    <script src="https://unpkg.com/@telegram-apps/sdk/dist/index.js"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             background-color: var(--tg-theme-bg-color, #ffffff);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
+            height: 100vh;
         }
-        
+
         #tilda-iframe {
             width: 100%;
             height: 100vh;
             border: none;
             overflow: hidden;
         }
-        
-        /* Loading overlay */
+
         #loading-overlay {
             position: fixed;
             top: 0;
@@ -42,7 +40,11 @@
             z-index: 9999;
             transition: opacity 0.3s ease;
         }
-        
+
+        .loading-content {
+            text-align: center;
+        }
+
         .loading-spinner {
             width: 40px;
             height: 40px;
@@ -50,239 +52,482 @@
             border-top: 3px solid var(--tg-theme-button-color, #007AFF);
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
         }
-        
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+
         .loading-text {
-            margin-top: 16px;
             color: var(--tg-theme-text-color, #000000);
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .loading-details {
+            color: var(--tg-theme-hint-color, #666666);
             font-size: 14px;
+            line-height: 1.4;
         }
-        
-        /* Hide scrollbars in iframe */
-        iframe {
-            scrollbar-width: none; /* Firefox */
-            -ms-overflow-style: none; /* Internet Explorer/Edge */
+
+        .error-message {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            padding: 20px;
+            text-align: center;
         }
-        
-        iframe::-webkit-scrollbar {
-            display: none; /* Chrome/Safari */
+
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .error-title {
+            color: var(--tg-theme-text-color, #000000);
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .error-description {
+            color: var(--tg-theme-hint-color, #666666);
+            font-size: 14px;
+            line-height: 1.4;
+            margin-bottom: 20px;
+        }
+
+        .error-details {
+            color: var(--tg-theme-hint-color, #999999);
+            font-size: 12px;
+            font-family: monospace;
+            background: rgba(0,0,0,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 100%;
+            overflow-x: auto;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .debug-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 10px;
+            font-family: monospace;
+            z-index: 11000;
+            max-width: 300px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .fullscreen-indicator {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 128, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 11001;
+            display: none;
         }
     </style>
 </head>
 <body>
+    <div id="fullscreen-indicator" class="fullscreen-indicator">
+        🔳 Полноэкранный режим
+    </div>
+
+    <div id="debug-info" class="debug-info">
+        <div>🚀 ENHANCED MODE - Full-Screen + Link Interception</div>
+        <div id="debug-log"></div>
+    </div>
+
     <div id="loading-overlay">
-        <div>
+        <div class="loading-content">
             <div class="loading-spinner"></div>
-            <div class="loading-text">Загрузка...</div>
+            <div class="loading-text">Инициализация...</div>
+            <div class="loading-details">Подключение к Telegram и настройка полноэкранного режима</div>
         </div>
     </div>
-    
+
+    <div id="error-overlay" class="error-message" style="display: none;">
+        <div class="error-icon">🔒</div>
+        <div class="error-title">Нет доступа</div>
+        <div class="error-description">У вас нет активной подписки для просмотра этого контента.</div>
+        <div class="error-details" id="error-details"></div>
+    </div>
+
     <iframe 
         id="tilda-iframe" 
         src="" 
-        is="x-frame-bypass"
         allow="payment; camera; microphone; geolocation"
         referrerpolicy="strict-origin-when-cross-origin"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox">
+        style="display: none;">
     </iframe>
 
     <script>
-        // Initialize Telegram WebApp
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand();
-        
-        // Set theme colors
-        document.documentElement.style.setProperty('--tg-theme-bg-color', window.Telegram.WebApp.themeParams.bg_color || '#ffffff');
-        document.documentElement.style.setProperty('--tg-theme-text-color', window.Telegram.WebApp.themeParams.text_color || '#000000');
-        document.documentElement.style.setProperty('--tg-theme-button-color', window.Telegram.WebApp.themeParams.button_color || '#007AFF');
-        document.documentElement.style.setProperty('--tg-theme-hint-color', window.Telegram.WebApp.themeParams.hint_color || '#999999');
-        
-        // Get Tilda URL from URL parameters and proxy it
-        const urlParams = new URLSearchParams(window.location.search);
-        const originalTildaUrl = urlParams.get('url') || 'https://www.xn--80aafma3abvkxse9a7f.xn--p1ai/telegram_payment';
-        const proxyUrl = 'https://avencoproxy-production.up.railway.app/proxy';
-        const tildaUrl = `${proxyUrl}?url=${encodeURIComponent(originalTildaUrl)}`;
-        
-        // Function to inject CSS into iframe to hide footer
-        function injectFooterRemovalCSS() {
-            const iframe = document.getElementById('tilda-iframe');
+        console.log('🚀 ENHANCED Full-Screen Mini App starting...');
+        let debugInfo = [];
+        let debugLogElement;
+        let isFullscreenActive = false;
+
+        function addDebugInfo(info) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = timestamp + ': ' + info;
+            debugInfo.push(logEntry);
+            console.log(info);
+
+            if (!debugLogElement) {
+                debugLogElement = document.getElementById('debug-log');
+            }
+            if (debugLogElement) {
+                debugLogElement.innerHTML = debugInfo.slice(-7).join('<br>');
+            }
+        }
+
+        function updateFullscreenIndicator(active) {
+            const indicator = document.getElementById('fullscreen-indicator');
+            if (active) {
+                indicator.style.display = 'block';
+                isFullscreenActive = true;
+                addDebugInfo('✅ Полноэкранный режим активен');
+            } else {
+                indicator.style.display = 'none';
+                isFullscreenActive = false;
+                addDebugInfo('📱 Обычный режим');
+            }
+        }
+
+        function checkTelegramWebApp() {
+            if (typeof window.Telegram === 'undefined' || !window.Telegram.WebApp) {
+                addDebugInfo('❌ Telegram WebApp API недоступен');
+                showError('Ошибка инициализации', 'Приложение должно быть открыто через Telegram', 'Telegram WebApp API не найден');
+                return false;
+            }
+            addDebugInfo('✅ Telegram WebApp API найден');
+            return true;
+        }
+
+        function initializeTelegramWebApp() {
+            addDebugInfo('🔧 Инициализация Telegram WebApp...');
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
             
-            if (iframe && iframe.contentDocument) {
-                try {
-                    const style = iframe.contentDocument.createElement('style');
-                    style.textContent = `
-                        /* Hide Tilda footer completely */
-                        .t-records .t-rec[data-record-type="215"] { 
-                            display: none !important; 
-                        }
-                        
-                        /* Hide common footer classes */
-                        .t-footer,
-                        footer,
-                        .t-rec_pt_footer,
-                        .t-sociallinks,
-                        [class*="footer"],
-                        [id*="footer"],
-                        .t-cover__filter,
-                        .t396__filter {
-                            display: none !important;
-                        }
-                        
-                        /* Remove bottom margin/padding from content */
-                        body {
-                            margin-bottom: 0 !important;
-                            padding-bottom: 0 !important;
-                        }
-                        
-                        /* Hide "Made on Tilda" branding */
-                        .t030__copyright,
-                        .t030__made-on-tilda,
-                        .t-footer__copyright,
-                        [class*="copyright"] {
-                            display: none !important;
-                        }
-                        
-                        /* Prevent link clicks in footer area */
-                        .t-footer a,
-                        footer a,
-                        .t-sociallinks a {
-                            pointer-events: none !important;
-                            cursor: default !important;
-                        }
-                        
-                        /* Ensure content fills the space */
-                        .t-records {
-                            padding-bottom: 20px !important;
-                        }
-                        
-                        /* Hide any potential Tilda branding or links */
-                        a[href*="tilda.cc"],
-                        a[href*="tilda.com"],
-                        .t-tildalink {
-                            display: none !important;
-                        }
-                    `;
+            // Set theme colors
+            document.documentElement.style.setProperty('--tg-theme-bg-color', window.Telegram.WebApp.themeParams.bg_color || '#ffffff');
+            document.documentElement.style.setProperty('--tg-theme-text-color', window.Telegram.WebApp.themeParams.text_color || '#000000');
+            document.documentElement.style.setProperty('--tg-theme-button-color', window.Telegram.WebApp.themeParams.button_color || '#007AFF');
+            document.documentElement.style.setProperty('--tg-theme-hint-color', window.Telegram.WebApp.themeParams.hint_color || '#999999');
+            
+            addDebugInfo('🎨 Тема настроена');
+        }
+
+        async function requestFullscreenMode() {
+            addDebugInfo('📱 Запрос полноэкранного режима...');
+            
+            try {
+                // Method 1: Try modern Telegram Apps SDK
+                if (typeof window.telegramApps !== 'undefined') {
+                    addDebugInfo('🔧 Использование Telegram Apps SDK');
+                    const { viewport } = window.telegramApps;
                     
-                    iframe.contentDocument.head.appendChild(style);
-                    console.log('Footer removal CSS injected successfully');
-                } catch (error) {
-                    console.log('Could not inject CSS due to CORS restrictions:', error);
+                    if (viewport && viewport.requestFullscreen) {
+                        await viewport.requestFullscreen();
+                        updateFullscreenIndicator(true);
+                        addDebugInfo('✅ SDK: Полноэкранный режим активирован');
+                        return true;
+                    }
                 }
-            }
-        }
-        
-        // Function to handle iframe load
-        function handleIframeLoad() {
-            const loadingOverlay = document.getElementById('loading-overlay');
-            
-            // Hide loading overlay
-            loadingOverlay.style.opacity = '0';
-            setTimeout(() => {
-                loadingOverlay.style.display = 'none';
-            }, 300);
-            
-            // Try to inject CSS after a short delay
-            setTimeout(injectFooterRemovalCSS, 1000);
-            setTimeout(injectFooterRemovalCSS, 3000); // Try again after 3 seconds
-        }
-        
-        // Function to intercept and handle link clicks
-        function interceptLinks() {
-            const iframe = document.getElementById('tilda-iframe');
-            
-            if (iframe && iframe.contentDocument) {
-                try {
-                    // Add click event listener to iframe document
-                    iframe.contentDocument.addEventListener('click', function(event) {
-                        const target = event.target.closest('a');
-                        
-                        if (target && target.href) {
-                            // Check if it's an external link (not payment related)
-                            const href = target.href.toLowerCase();
-                            
-                            // Allow payment-related links to work normally
-                            if (href.includes('tinkoff') || 
-                                href.includes('t-bank') || 
-                                href.includes('securepay') ||
-                                href.includes('payment') ||
-                                href.includes('pay') ||
-                                target.classList.contains('t-btn') ||
-                                target.closest('.t-form')) {
-                                return; // Allow these links to work
-                            }
-                            
-                            // Block other external links
-                            if (href.includes('tilda') || 
-                                href.includes('http') ||
-                                target.closest('.t-footer') ||
-                                target.closest('footer')) {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                console.log('Blocked external link:', href);
-                                
-                                // Show notification that link was blocked
-                                window.Telegram.WebApp.showAlert('Ссылка заблокирована для безопасности');
-                                return false;
-                            }
-                        }
-                    }, true);
-                } catch (error) {
-                    console.log('Could not intercept links due to CORS restrictions:', error);
-                }
-            }
-        }
-        
-        // Set up iframe
-        const iframe = document.getElementById('tilda-iframe');
-        iframe.src = tildaUrl;
-        
-        // Handle iframe load
-        iframe.onload = function() {
-            handleIframeLoad();
-            
-            // Try to intercept links
-            setTimeout(interceptLinks, 500);
-            setTimeout(interceptLinks, 2000);
-        };
-        
-        // Handle iframe errors
-        iframe.onerror = function() {
-            const loadingOverlay = document.getElementById('loading-overlay');
-            loadingOverlay.querySelector('.loading-text').textContent = 'Ошибка загрузки';
-        };
-        
-        // Listen for messages from the iframe (if Tilda sends any)
-        window.addEventListener('message', function(event) {
-            // Handle payment completion or other messages from Tilda
-            if (event.data && event.data.type === 'payment_success') {
-                // Payment completed, send data to your bot
-                window.Telegram.WebApp.sendData(JSON.stringify({
-                    action: 'payment_completed',
-                    transaction_id: event.data.transaction_id || null,
-                    user_id: window.Telegram.WebApp.initDataUnsafe.user?.id || null
-                }));
                 
-                // Close the WebApp
-                window.Telegram.WebApp.close();
+                // Method 2: Try standard WebApp API
+                if (window.Telegram.WebApp.requestFullscreen) {
+                    addDebugInfo('🔧 Использование стандартного WebApp API');
+                    window.Telegram.WebApp.requestFullscreen();
+                    updateFullscreenIndicator(true);
+                    addDebugInfo('✅ WebApp: Полноэкранный режим запрошен');
+                    return true;
+                }
+                
+                // Method 3: Enhanced viewport control
+                if (window.Telegram.WebApp.viewportHeight) {
+                    addDebugInfo('📐 Viewport доступен: ' + window.Telegram.WebApp.viewportHeight + 'px');
+                    document.body.style.height = window.Telegram.WebApp.viewportHeight + 'px';
+                }
+                
+                addDebugInfo('⚠️ Полноэкранный режим недоступен в этой версии Telegram');
+                return false;
+                
+            } catch (error) {
+                addDebugInfo('❌ Ошибка полноэкранного режима: ' + error.message);
+                return false;
             }
+        }
+
+        function setupBackButton() {
+            addDebugInfo('⬅️ Настройка кнопки "Назад"...');
+            
+            // Set up back button with confirmation
+            window.Telegram.WebApp.BackButton.onClick(function() {
+                addDebugInfo('⬅️ Нажата кнопка "Назад"');
+                
+                // Show confirmation before closing
+                window.Telegram.WebApp.showConfirm(
+                    'Закрыть приложение?',
+                    function(confirmed) {
+                        if (confirmed) {
+                            addDebugInfo('✅ Пользователь подтвердил закрытие');
+                            window.Telegram.WebApp.close();
+                        } else {
+                            addDebugInfo('❌ Пользователь отменил закрытие');
+                        }
+                    }
+                );
+            });
+            
+            // Show the back button
+            window.Telegram.WebApp.BackButton.show();
+            addDebugInfo('✅ Кнопка "Назад" активирована');
+        }
+
+        function getUserData() {
+            const initData = window.Telegram.WebApp.initDataUnsafe;
+            const userId = initData?.user?.id;
+
+            addDebugInfo('👤 Получение данных пользователя...');
+            addDebugInfo('📋 InitData: ' + JSON.stringify(initData?.user || 'нет данных'));
+
+            if (!userId) {
+                addDebugInfo('❌ ID пользователя не найден');
+                showError('Ошибка авторизации', 'Не удалось получить данные пользователя', 'User ID не найден в initDataUnsafe');
+                return null;
+            }
+
+            addDebugInfo('✅ User ID: ' + userId);
+            return userId;
+        }
+
+        async function checkSubscription(userId) {
+            try {
+                addDebugInfo('🔍 Проверка подписки для пользователя ' + userId);
+                updateLoadingText('Проверка подписки...', 'Пользователь: ' + userId);
+
+                const botUrl = 'https://avencobot-production.up.railway.app';
+                const apiUrl = botUrl + '/api/check_subscription/' + userId;
+
+                addDebugInfo('📡 API запрос: ' + apiUrl);
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(function() { 
+                    controller.abort(); 
+                }, 15000);
+
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                addDebugInfo('📊 Ответ API: ' + response.status + ' ' + response.statusText);
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+                }
+
+                const data = await response.json();
+                addDebugInfo('📋 Данные подписки: ' + JSON.stringify(data));
+
+                if (data.success && data.active) {
+                    addDebugInfo('✅ Подписка активна, загружаем контент');
+                    loadContent();
+                } else {
+                    addDebugInfo('❌ Подписка неактивна');
+                    showError(
+                        'Нет активной подписки', 
+                        'Для просмотра контента необходимо оформить подписку',
+                        'API вернул: active=' + data.active + ', success=' + data.success
+                    );
+                }
+            } catch (error) {
+                addDebugInfo('❌ Ошибка при проверке подписки: ' + error.message);
+
+                if (error.name === 'AbortError') {
+                    addDebugInfo('⏱️ Таймаут запроса');
+                }
+
+                showError(
+                    'Ошибка подключения', 
+                    'Не удалось проверить статус подписки. Проверьте интернет-соединение.',
+                    error.message
+                );
+            }
+        }
+
+        function loadContent() {
+            addDebugInfo('📱 Загрузка контента с перехватом ссылок...');
+            updateLoadingText('Загрузка контента...', 'Подготовка Tilda страницы с перехватом ссылок');
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const originalTildaUrl = urlParams.get('url');
+
+            addDebugInfo('🔗 Исходный URL: ' + originalTildaUrl);
+
+            if (!originalTildaUrl) {
+                addDebugInfo('❌ URL параметр не найден');
+                showError('Ошибка конфигурации', 'Не указан URL контента', 'Параметр url отсутствует в query string');
+                return;
+            }
+
+            const proxyUrl = window.location.origin + '/proxy';
+            const tildaUrl = proxyUrl + '?url=' + encodeURIComponent(originalTildaUrl);
+
+            addDebugInfo('🌐 Proxy URL: ' + tildaUrl);
+
+            const iframe = document.getElementById('tilda-iframe');
+            iframe.src = tildaUrl;
+            iframe.style.display = 'block';
+
+            const loadingTimer = setTimeout(function() {
+                addDebugInfo('⏱️ Таймаут загрузки контента');
+                showError('Ошибка загрузки', 'Контент загружается слишком долго', 'Превышен таймаут в 30 секунд');
+            }, 30000);
+
+            iframe.onload = function() {
+                addDebugInfo('✅ Iframe загружен успешно');
+                clearTimeout(loadingTimer);
+
+                const loadingOverlay = document.getElementById('loading-overlay');
+                loadingOverlay.style.opacity = '0';
+                setTimeout(function() {
+                    loadingOverlay.style.display = 'none';
+                }, 300);
+
+                // Try fullscreen again after content loads
+                setTimeout(function() {
+                    if (!isFullscreenActive) {
+                        requestFullscreenMode();
+                    }
+                }, 1000);
+            };
+
+            iframe.onerror = function() {
+                addDebugInfo('❌ Ошибка загрузки iframe');
+                clearTimeout(loadingTimer);
+                showError('Ошибка загрузки', 'Не удалось загрузить контент', 'iframe.onerror сработал');
+            };
+        }
+
+        function updateLoadingText(text, details) {
+            const loadingText = document.querySelector('.loading-text');
+            const loadingDetails = document.querySelector('.loading-details');
+
+            if (loadingText) loadingText.textContent = text;
+            if (loadingDetails) loadingDetails.textContent = details || '';
+        }
+
+        function showError(title, description, technicalDetails) {
+            addDebugInfo('❌ Показываем ошибку: ' + title + ' - ' + description);
+
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const errorOverlay = document.getElementById('error-overlay');
+            const errorDetailsEl = document.getElementById('error-details');
+
+            loadingOverlay.style.display = 'none';
+            errorOverlay.style.display = 'flex';
+
+            errorOverlay.querySelector('.error-title').textContent = title;
+            errorOverlay.querySelector('.error-description').textContent = description;
+
+            const debugText = technicalDetails ? 
+                'Техническая информация:\n' + technicalDetails + '\n\nОтладочные данные:\n' + debugInfo.join('\n') : 
+                'Отладочные данные:\n' + debugInfo.join('\n');
+
+            errorDetailsEl.textContent = debugText;
+        }
+
+        // Monitor fullscreen changes
+        function monitorFullscreenChanges() {
+            // Listen for fullscreen events
+            if (window.Telegram.WebApp.onEvent) {
+                window.Telegram.WebApp.onEvent('fullscreenChanged', function(data) {
+                    addDebugInfo('📱 Fullscreen изменен: ' + JSON.stringify(data));
+                    updateFullscreenIndicator(data.isFullscreen);
+                });
+
+                window.Telegram.WebApp.onEvent('viewportChanged', function(data) {
+                    addDebugInfo('📐 Viewport изменен: ' + JSON.stringify(data));
+                });
+            }
+
+            // Check fullscreen status periodically
+            setInterval(function() {
+                if (window.Telegram.WebApp.isFullscreen !== undefined) {
+                    const currentFullscreen = window.Telegram.WebApp.isFullscreen;
+                    if (currentFullscreen !== isFullscreenActive) {
+                        updateFullscreenIndicator(currentFullscreen);
+                    }
+                }
+            }, 2000);
+        }
+
+        // Main initialization function
+        async function startApp() {
+            if (!checkTelegramWebApp()) {
+                return;
+            }
+
+            initializeTelegramWebApp();
+            setupBackButton();
+            monitorFullscreenChanges();
+            
+            // Try fullscreen mode immediately
+            await requestFullscreenMode();
+
+            const userId = getUserData();
+            if (!userId) {
+                return;
+            }
+
+            await checkSubscription(userId);
+
+            addDebugInfo('🎯 ENHANCED Mini App with Full-Screen + Link Interception готов');
+        }
+
+        // Start the app when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(startApp, 100);
         });
-        
-        // Handle back button
-        window.Telegram.WebApp.BackButton.onClick(function() {
-            window.Telegram.WebApp.close();
-        });
-        
-        // Show back button
-        window.Telegram.WebApp.BackButton.show();
-        
-        // Log for debugging
-        console.log('Telegram WebApp initialized');
-        console.log('Loading Tilda URL:', tildaUrl);
+
+        // Alternative start if DOMContentLoaded already fired
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startApp);
+        } else {
+            setTimeout(startApp, 100);
+        }
     </script>
 </body>
 </html>
