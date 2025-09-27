@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Авенко - Технологические карты</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/@telegram-apps/sdk/dist/index.js"></script>
     <style>
         * {
             margin: 0;
@@ -158,7 +157,7 @@
     </div>
 
     <div id="debug-info" class="debug-info">
-        <div>🚀 ENHANCED MODE - Full-Screen + Link Interception</div>
+        <div>🔧 FIXED VERSION - Working Full-Screen</div>
         <div id="debug-log"></div>
     </div>
 
@@ -166,7 +165,7 @@
         <div class="loading-content">
             <div class="loading-spinner"></div>
             <div class="loading-text">Инициализация...</div>
-            <div class="loading-details">Подключение к Telegram и настройка полноэкранного режима</div>
+            <div class="loading-details">Подключение к Telegram и настройка</div>
         </div>
     </div>
 
@@ -186,7 +185,7 @@
     </iframe>
 
     <script>
-        console.log('🚀 ENHANCED Full-Screen Mini App starting...');
+        console.log('🔧 FIXED Full-Screen Mini App starting...');
         let debugInfo = [];
         let debugLogElement;
         let isFullscreenActive = false;
@@ -224,7 +223,11 @@
                 showError('Ошибка инициализации', 'Приложение должно быть открыто через Telegram', 'Telegram WebApp API не найден');
                 return false;
             }
+            
             addDebugInfo('✅ Telegram WebApp API найден');
+            addDebugInfo('📋 Версия API: ' + (window.Telegram.WebApp.version || 'неизвестно'));
+            addDebugInfo('🔍 Доступны методы: ' + Object.keys(window.Telegram.WebApp).join(', '));
+            
             return true;
         }
 
@@ -242,45 +245,54 @@
             addDebugInfo('🎨 Тема настроена');
         }
 
-        async function requestFullscreenMode() {
-            addDebugInfo('📱 Запрос полноэкранного режима...');
+        function requestFullscreenMode() {
+            addDebugInfo('📱 Проверка полноэкранного режима...');
             
-            try {
-                // Method 1: Try modern Telegram Apps SDK
-                if (typeof window.telegramApps !== 'undefined') {
-                    addDebugInfo('🔧 Использование Telegram Apps SDK');
-                    const { viewport } = window.telegramApps;
-                    
-                    if (viewport && viewport.requestFullscreen) {
-                        await viewport.requestFullscreen();
-                        updateFullscreenIndicator(true);
-                        addDebugInfo('✅ SDK: Полноэкранный режим активирован');
-                        return true;
+            // Check what methods are available
+            const webApp = window.Telegram.WebApp;
+            
+            if (typeof webApp.requestFullscreen === 'function') {
+                addDebugInfo('✅ requestFullscreen доступен');
+                try {
+                    webApp.requestFullscreen();
+                    addDebugInfo('📱 requestFullscreen вызван');
+                    updateFullscreenIndicator(true);
+                    return true;
+                } catch (error) {
+                    addDebugInfo('❌ Ошибка requestFullscreen: ' + error.message);
+                }
+            } else {
+                addDebugInfo('⚠️ requestFullscreen недоступен в этой версии');
+            }
+
+            // Check for isFullscreen property
+            if (typeof webApp.isFullscreen !== 'undefined') {
+                addDebugInfo('📊 isFullscreen: ' + webApp.isFullscreen);
+                updateFullscreenIndicator(webApp.isFullscreen);
+            } else {
+                addDebugInfo('⚠️ isFullscreen недоступен');
+            }
+
+            // Enhanced viewport control as fallback
+            if (webApp.viewportHeight) {
+                addDebugInfo('📐 Viewport: ' + webApp.viewportHeight + 'px');
+                document.body.style.height = webApp.viewportHeight + 'px';
+            }
+
+            // Try alternative fullscreen approach
+            setTimeout(function() {
+                addDebugInfo('🔄 Повторная попытка через 2 секунды...');
+                if (typeof webApp.requestFullscreen === 'function' && !isFullscreenActive) {
+                    try {
+                        webApp.requestFullscreen();
+                        addDebugInfo('🔄 Повторный вызов requestFullscreen');
+                    } catch (error) {
+                        addDebugInfo('❌ Повторная ошибка: ' + error.message);
                     }
                 }
-                
-                // Method 2: Try standard WebApp API
-                if (window.Telegram.WebApp.requestFullscreen) {
-                    addDebugInfo('🔧 Использование стандартного WebApp API');
-                    window.Telegram.WebApp.requestFullscreen();
-                    updateFullscreenIndicator(true);
-                    addDebugInfo('✅ WebApp: Полноэкранный режим запрошен');
-                    return true;
-                }
-                
-                // Method 3: Enhanced viewport control
-                if (window.Telegram.WebApp.viewportHeight) {
-                    addDebugInfo('📐 Viewport доступен: ' + window.Telegram.WebApp.viewportHeight + 'px');
-                    document.body.style.height = window.Telegram.WebApp.viewportHeight + 'px';
-                }
-                
-                addDebugInfo('⚠️ Полноэкранный режим недоступен в этой версии Telegram');
-                return false;
-                
-            } catch (error) {
-                addDebugInfo('❌ Ошибка полноэкранного режима: ' + error.message);
-                return false;
-            }
+            }, 2000);
+
+            return false;
         }
 
         function setupBackButton() {
@@ -388,8 +400,8 @@
         }
 
         function loadContent() {
-            addDebugInfo('📱 Загрузка контента с перехватом ссылок...');
-            updateLoadingText('Загрузка контента...', 'Подготовка Tilda страницы с перехватом ссылок');
+            addDebugInfo('📱 Загрузка контента...');
+            updateLoadingText('Загрузка контента...', 'Подготовка Tilda страницы');
 
             const urlParams = new URLSearchParams(window.location.search);
             const originalTildaUrl = urlParams.get('url');
@@ -428,9 +440,8 @@
 
                 // Try fullscreen again after content loads
                 setTimeout(function() {
-                    if (!isFullscreenActive) {
-                        requestFullscreenMode();
-                    }
+                    addDebugInfo('🔄 Повторная проверка полноэкранного режима после загрузки');
+                    requestFullscreenMode();
                 }, 1000);
             };
 
@@ -471,31 +482,44 @@
 
         // Monitor fullscreen changes
         function monitorFullscreenChanges() {
-            // Listen for fullscreen events
-            if (window.Telegram.WebApp.onEvent) {
-                window.Telegram.WebApp.onEvent('fullscreenChanged', function(data) {
-                    addDebugInfo('📱 Fullscreen изменен: ' + JSON.stringify(data));
-                    updateFullscreenIndicator(data.isFullscreen);
-                });
+            // Listen for fullscreen events if available
+            const webApp = window.Telegram.WebApp;
+            
+            if (typeof webApp.onEvent === 'function') {
+                try {
+                    webApp.onEvent('fullscreenChanged', function(data) {
+                        addDebugInfo('📱 Fullscreen изменен: ' + JSON.stringify(data));
+                        updateFullscreenIndicator(data.isFullscreen);
+                    });
 
-                window.Telegram.WebApp.onEvent('viewportChanged', function(data) {
-                    addDebugInfo('📐 Viewport изменен: ' + JSON.stringify(data));
-                });
+                    webApp.onEvent('fullscreenFailed', function(data) {
+                        addDebugInfo('❌ Fullscreen failed: ' + JSON.stringify(data));
+                    });
+
+                    webApp.onEvent('viewportChanged', function(data) {
+                        addDebugInfo('📐 Viewport изменен: ' + JSON.stringify(data));
+                    });
+
+                    addDebugInfo('👂 События полноэкранного режима настроены');
+                } catch (error) {
+                    addDebugInfo('⚠️ Ошибка настройки событий: ' + error.message);
+                }
             }
 
             // Check fullscreen status periodically
             setInterval(function() {
-                if (window.Telegram.WebApp.isFullscreen !== undefined) {
-                    const currentFullscreen = window.Telegram.WebApp.isFullscreen;
+                const webApp = window.Telegram.WebApp;
+                if (typeof webApp.isFullscreen !== 'undefined') {
+                    const currentFullscreen = webApp.isFullscreen;
                     if (currentFullscreen !== isFullscreenActive) {
                         updateFullscreenIndicator(currentFullscreen);
                     }
                 }
-            }, 2000);
+            }, 3000);
         }
 
         // Main initialization function
-        async function startApp() {
+        function startApp() {
             if (!checkTelegramWebApp()) {
                 return;
             }
@@ -505,16 +529,16 @@
             monitorFullscreenChanges();
             
             // Try fullscreen mode immediately
-            await requestFullscreenMode();
+            requestFullscreenMode();
 
             const userId = getUserData();
             if (!userId) {
                 return;
             }
 
-            await checkSubscription(userId);
+            checkSubscription(userId);
 
-            addDebugInfo('🎯 ENHANCED Mini App with Full-Screen + Link Interception готов');
+            addDebugInfo('🎯 FIXED Mini App готов к работе');
         }
 
         // Start the app when page loads
